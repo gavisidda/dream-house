@@ -243,6 +243,22 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
 .tag-green{background:#E8F5E9;color:var(--green);font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid #A5D6A7;}
 .tag-orange{background:#FFF3E0;color:var(--saffron);font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid var(--border);}
 .tag-red{background:#FFEBEE;color:var(--crimson);font-size:10px;padding:2px 7px;border-radius:99px;border:1px solid #FFCDD2;}
+/* Field error highlight */
+.field-error{border-color:#E53935 !important;background:#FFF5F5 !important;}
+/* Bank txn log */
+.btxn-log{background:var(--ivory-dk);border-radius:8px;padding:9px 10px;margin-top:9px;border:1px solid var(--border-lt);}
+.btxn-log-title{font-family:'Cinzel',serif;font-size:10px;color:var(--mahogany);letter-spacing:1px;margin-bottom:6px;}
+.btxn-row{font-size:11px;color:var(--text-mid);padding:4px 0;border-bottom:1px solid var(--border-lt);display:flex;justify-content:space-between;align-items:flex-start;gap:6px;}
+.btxn-row:last-child{border-bottom:none;}
+.btxn-left{flex:1;}
+.btxn-right{font-family:'Cinzel',serif;font-size:11px;white-space:nowrap;}
+.btxn-right.cadd{color:var(--green);}
+.btxn-right.cout{color:var(--crimson-lt);}
+.btxn-right.cin{color:var(--blue-lt);}
+.bank-op-tabs{display:flex;gap:6px;margin-bottom:12px;}
+.bank-op-tab{flex:1;padding:8px;text-align:center;border:1.5px solid var(--border-lt);border-radius:8px;cursor:pointer;font-size:13px;background:var(--ivory);color:var(--text-mid);transition:.15s;}
+.bank-op-tab.active{background:var(--green-lt);border-color:var(--green-lt);color:white;font-weight:600;}
+.bank-op-tab.atransfer.active{background:var(--blue-lt);border-color:var(--blue-lt);}
 </style>
 </head>
 <body>
@@ -367,6 +383,7 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
       <button class="btn-sm btn-edit" style="width:auto;padding:5px 12px;" onclick="openBankModal()">+ Add Account</button>
     </div>
     <div id="bank-list"><div class="spinner">Loading…</div></div>
+    <button class="btn-secondary" style="margin-top:10px" onclick="exportBankTxnCSV()">📥 Export Bank Transactions (CSV)</button>
   </div>
 
   <!-- ── ADD / EDIT ENTRY ── -->
@@ -400,7 +417,7 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
         <div class="form-group"><label>Spent By</label>
           <select id="f-spentby"></select></div>
         <div class="form-group"><label>Transaction Type</label>
-          <select id="f-txntype">
+          <select id="f-txntype" onchange="smartFilterBankAccount()">
             <option value="">Select…</option>
             <option>Cash</option>
             <option>PhonePe</option>
@@ -555,7 +572,7 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
         <option>Loan / Credit</option>
         <option>Other</option>
       </select></div>
-    <div class="form-group"><label>Total Amount / Balance Added (₹)</label>
+    <div class="form-group"><label>Initial Amount / Total Balance (₹)</label>
       <input type="number" id="ba-amount" placeholder="Amount allocated for construction" inputmode="numeric"/></div>
     <div class="form-group"><label>Bank Name (optional)</label>
       <input type="text" id="ba-bank" placeholder="e.g. State Bank of India"/></div>
@@ -564,6 +581,51 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
     <input type="hidden" id="ba-id"/>
     <button class="btn-primary" onclick="saveBankAccount()">💾 Save Account</button>
     <button class="btn-secondary" onclick="closeModal('modal-bank')">Cancel</button>
+  </div>
+</div>
+
+<!-- Bank Update / Transfer Modal -->
+<div class="modal-overlay" id="modal-bankop">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="bankop-title">Update Account</div>
+    <div id="bankop-info" style="background:var(--ivory-dk);border-radius:8px;padding:10px;margin-bottom:12px;font-size:13px;border:1px solid var(--border-lt);"></div>
+    <input type="hidden" id="bop-bank-id"/>
+    <div class="bank-op-tabs">
+      <div class="bank-op-tab active" id="bop-tab-add" onclick="setBankOp('add')">➕ Add Funds</div>
+      <div class="bank-op-tab atransfer" id="bop-tab-transfer" onclick="setBankOp('transfer')">🔀 Transfer</div>
+    </div>
+    <!-- ADD FUNDS fields -->
+    <div id="bop-add-fields">
+      <div class="form-group"><label>Amount Added (₹) *</label>
+        <input type="number" id="bop-add-amount" placeholder="0" inputmode="numeric"/></div>
+      <div class="form-group"><label>Date *</label>
+        <input type="date" id="bop-add-date"/></div>
+      <div class="form-group"><label>Added By (Who) *</label>
+        <select id="bop-add-by"></select></div>
+      <div class="form-group"><label>Source of Amount</label>
+        <input type="text" id="bop-add-source" placeholder="e.g. Salary, FD withdrawal, Loan, Gift…"/></div>
+      <div class="form-group"><label>Notes / Remarks</label>
+        <input type="text" id="bop-add-notes" placeholder="Optional remarks"/></div>
+    </div>
+    <!-- TRANSFER fields -->
+    <div id="bop-transfer-fields" style="display:none">
+      <div class="form-group"><label>Transfer From *</label>
+        <select id="bop-from-bank"><option value="">Select account…</option></select></div>
+      <div class="form-group"><label>Transfer To *</label>
+        <select id="bop-to-bank"><option value="">Select account…</option></select></div>
+      <div class="form-group"><label>Amount (₹) *</label>
+        <input type="number" id="bop-txfr-amount" placeholder="0" inputmode="numeric"/></div>
+      <div class="form-group"><label>Date *</label>
+        <input type="date" id="bop-txfr-date"/></div>
+      <div class="form-group"><label>Transferred By *</label>
+        <select id="bop-txfr-by"></select></div>
+      <div class="form-group"><label>Notes / Remarks</label>
+        <input type="text" id="bop-txfr-notes" placeholder="Optional remarks"/></div>
+    </div>
+    <div id="bankop-result" style="font-size:12px;color:var(--green);font-weight:600;margin-bottom:6px;min-height:14px;"></div>
+    <button class="btn-green" id="bop-confirm-btn" onclick="confirmBankOp()">✅ Confirm</button>
+    <button class="btn-secondary" onclick="closeModal('modal-bankop')">Cancel</button>
   </div>
 </div>
 
@@ -581,7 +643,7 @@ body::before{content:'';display:block;height:6px;background:repeating-linear-gra
     <div class="form-group"><label>Paid By (Who handled)</label>
       <select id="pn-paidby"></select></div>
     <div class="form-group"><label>Transaction Type</label>
-      <select id="pn-txntype">
+      <select id="pn-txntype" onchange="smartFilterPayNowBank()">
         <option value="">Select…</option>
         <option>Cash</option><option>PhonePe</option><option>Google Pay</option>
         <option>Paytm</option><option>NEFT / IMPS</option><option>Net Banking</option>
@@ -636,9 +698,9 @@ const DS={
     {id:"m2",name:"Uma",role:"member",pin:"654321"},
   ],
   banks:[
-    {id:"b1",name:"SBI – Gavisiddappa",type:"Savings Account",amount:1500000,bank:"State Bank of India",notes:"Main account"},
-    {id:"b2",name:"Canara Bank",type:"Savings Account",amount:500000,bank:"Canara Bank",notes:""},
-    {id:"b3",name:"Cash In Hand",type:"Cash In Hand",amount:200000,bank:"",notes:"Physical cash kept at home"},
+    {id:"b1",name:"SBI – Gavisiddappa",type:"Savings Account",amount:1500000,bank:"State Bank of India",notes:"Main account",transactions:[{type:"add",amount:1500000,date:"2025-03-01",by:"Gavisiddappa",source:"Savings",note:"Initial allocation",recordedAt:"2025-03-01"}]},
+    {id:"b2",name:"Canara Bank",type:"Savings Account",amount:500000,bank:"Canara Bank",notes:"",transactions:[{type:"add",amount:500000,date:"2025-03-01",by:"Gavisiddappa",source:"Savings",note:"Initial allocation",recordedAt:"2025-03-01"}]},
+    {id:"b3",name:"Cash In Hand",type:"Cash In Hand",amount:200000,bank:"",notes:"Physical cash kept at home",transactions:[{type:"add",amount:200000,date:"2025-03-01",by:"Gavisiddappa",source:"Withdrawn from SBI",note:"Cash for daily expenses",recordedAt:"2025-03-01"}]},
   ],
   phases:[
     {name:"Site Clearing & Layout",pct:100},{name:"Soil Test & Survey",pct:100},
@@ -831,7 +893,7 @@ function renderDashboard(){
   const{spent,pendAmt,partBal,matAmt,labAmt,todayAmt,bankTotal}=calcTotals();
   const est=settings.estimatedBudget||0;
   const g=id=>document.getElementById(id);
-  g("dash-greeting").textContent=`Welcome, ${CU.name}! 🙏  ${settings.projectName||"Dream House"}`;
+  g("dash-greeting").textContent=`Welcome, ${CU.name}! 🏠  ${settings.projectName||"Dream House"}`;
   g("dash-budget").textContent=fmt(bankTotal);
   g("dash-spent").textContent=fmt(spent);
   g("dash-remain").textContent=fmt(bankTotal-spent);
@@ -920,7 +982,15 @@ function renderBudgetTab(){
       <div class="bank-avail">Available: ${fmt(avail)}</div>
       <div class="progress-bar" style="margin-top:8px;height:5px;"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
       ${b.notes?`<div style="font-size:11px;color:var(--text-muted);margin-top:5px;">📝 ${b.notes}</div>`:""}
+      ${(b.transactions||[]).length?`<div class="btxn-log">
+        <div class="btxn-log-title">Transaction History</div>
+        ${[...(b.transactions||[])].reverse().slice(0,5).map(t=>`<div class="btxn-row">
+          <div class="btxn-left">${t.type==="add"?"➕":"🔀"} ${t.date||""} · ${t.by||""} ${t.source?" · "+t.source:""} ${t.note?" · "+t.note:""}</div>
+          <div class="btxn-right ${t.type==="add"?"cadd":t.dir==="out"?"cout":"cin"}">${t.type==="add"?"+":t.dir==="out"?"↗":"↙"} ${fmt(t.amount)}</div>
+        </div>`).join("")}
+      </div>`:""}
       <div class="bank-actions">
+        <button class="btn-sm" style="background:linear-gradient(135deg,#E8F5E9,#C8E6C9);color:var(--green);border:1px solid #A5D6A7;font-weight:600;" onclick="openBankOp('${b.id}')">💰 Update</button>
         <button class="btn-sm btn-edit" onclick="editBank('${b.id}')">✏️ Edit</button>
         ${CU.role==="owner"?`<button class="btn-sm btn-delete" onclick="deleteBank('${b.id}')">🗑 Delete</button>`:""}
       </div>
@@ -1172,7 +1242,48 @@ function resetForm(){
   if(CU)document.getElementById("f-spentby").value=CU.name;
   setType("material");
 }
+// Smart bank filter based on txn type
+function smartFilterBankAccount(){
+  const txn=document.getElementById("f-txntype").value;
+  const sel=document.getElementById("f-bankaccount");
+  const isCash=txn==="Cash";
+  const isOnline=["PhonePe","Google Pay","Paytm","NEFT / IMPS","Net Banking","UPI","Cheque","DD"].includes(txn);
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Select account…</option>'+banks.map(b=>{
+    const isCashAcct=b.type==="Cash In Hand"||b.name.toLowerCase().includes("cash");
+    if(isCash&&!isCashAcct)return''; // Cash txn: only cash accounts
+    if(isOnline&&isCashAcct)return''; // Online txn: no cash accounts
+    return`<option value="${b.name}">${b.name}</option>`;
+  }).join("");
+  if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+// Same filter for Pay Now modal
+function smartFilterPayNowBank(){
+  const txn=document.getElementById("pn-txntype").value;
+  const sel=document.getElementById("pn-bankaccount");
+  const isCash=txn==="Cash";
+  const isOnline=["PhonePe","Google Pay","Paytm","NEFT / IMPS","Net Banking","UPI","Cheque","DD"].includes(txn);
+  const prev=sel.value;
+  sel.innerHTML='<option value="">Select account…</option>'+banks.map(b=>{
+    const isCashAcct=b.type==="Cash In Hand"||b.name.toLowerCase().includes("cash");
+    if(isCash&&!isCashAcct)return'';
+    if(isOnline&&isCashAcct)return'';
+    return`<option value="${b.name}">${b.name}</option>`;
+  }).join("");
+  if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function markError(id,msg){
+  const el=document.getElementById(id);
+  if(el){el.style.border="1.5px solid #E53935";el.style.background="#FFF5F5";}
+  toast("⚠️ "+msg);
+}
+function clearErrors(){
+  ["f-desc","f-cat","f-amount","f-vendor","f-qty","f-date","f-spentby","f-txntype","f-bankaccount","f-status","f-paid"].forEach(id=>{
+    const el=document.getElementById(id);if(el){el.style.border="";el.style.background="";}
+  });
+}
 async function saveEntry(){
+  clearErrors();
   const btn=document.getElementById("btn-save-entry");
   const desc   =document.getElementById("f-desc").value.trim();
   const cat    =document.getElementById("f-cat").value;
@@ -1185,7 +1296,30 @@ async function saveEntry(){
   const spentBy=document.getElementById("f-spentby").value;
   const txnType=document.getElementById("f-txntype").value;
   const bankAccount=document.getElementById("f-bankaccount").value;
-  if(!desc||!cat||!amount){toast("⚠️ Description, Category & Amount required");return;}
+  // ── Mandatory field validation ──
+  if(!desc){markError("f-desc","Description is required");return;}
+  if(!cat){markError("f-cat","Select a category");return;}
+  if(!amount){markError("f-amount","Enter the total amount");return;}
+  if(!vendor){markError("f-vendor","Vendor / person name is required");return;}
+  if(!qty){markError("f-qty","Enter quantity or unit");return;}
+  if(!date){markError("f-date","Select a date");return;}
+  if(!spentBy){markError("f-spentby","Select who handled the payment");return;}
+  // Skip txnType & bankAccount for pending entries (not yet paid)
+  if(status!=="pending"){
+    if(!txnType){markError("f-txntype","Select transaction type");return;}
+    if(!bankAccount){markError("f-bankaccount","Select bank/account used");return;}
+    // ── Smart cross-field validation: Cash vs Online ──
+    const isCash=txnType==="Cash";
+    const isOnline=["PhonePe","Google Pay","Paytm","NEFT / IMPS","Net Banking","UPI","Cheque","DD"].includes(txnType);
+    const selBank=banks.find(b=>b.name===bankAccount);
+    const isCashAcct=selBank&&(selBank.type==="Cash In Hand"||selBank.name.toLowerCase().includes("cash"));
+    if(isCash&&selBank&&!isCashAcct){
+      markError("f-bankaccount","Cash payment must use Cash In Hand account");return;
+    }
+    if(isOnline&&isCashAcct){
+      markError("f-bankaccount","Online payment cannot use Cash In Hand — select a bank account");return;
+    }
+  }
   let paidAmt=amount,balanceAmt=0;
   if(status==="partial"){
     paidAmt=parseFloat(document.getElementById("f-paid").value)||0;
@@ -1407,6 +1541,130 @@ let toastT;
 function toast(msg){
   const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");
   clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2800);
+}
+
+// ══════════════════════════════════════════════
+//  BANK UPDATE / TRANSFER OPERATIONS
+// ══════════════════════════════════════════════
+let currentBankOp="add";
+function setBankOp(op){
+  currentBankOp=op;
+  document.getElementById("bop-tab-add").classList.toggle("active",op==="add");
+  document.getElementById("bop-tab-transfer").classList.toggle("active",op==="transfer");
+  document.getElementById("bop-add-fields").style.display=op==="add"?"block":"none";
+  document.getElementById("bop-transfer-fields").style.display=op==="transfer"?"block":"none";
+  document.getElementById("bankop-result").textContent="";
+}
+function openBankOp(bankId){
+  const b=banks.find(x=>x.id===bankId);if(!b)return;
+  document.getElementById("bop-bank-id").value=bankId;
+  document.getElementById("bankop-title").textContent="Update: "+b.name;
+  const sp=calcBankSpent(b.name);
+  document.getElementById("bankop-info").innerHTML=
+    `<b>${b.name}</b> (${b.type})<br/>Total Allocated: <b>${fmt(b.amount)}</b> · Spent: <span style="color:var(--crimson-lt)">${fmt(sp)}</span> · Available: <span style="color:var(--green)">${fmt(b.amount-sp)}</span>`;
+  // Populate member dropdowns
+  const mOpts=members.map(m=>`<option>${m.name}</option>`).join("");
+  ["bop-add-by","bop-txfr-by"].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=mOpts;});
+  if(CU){document.getElementById("bop-add-by").value=CU.name;document.getElementById("bop-txfr-by").value=CU.name;}
+  // Populate from/to dropdowns for transfer
+  const bOpts=banks.map(b=>`<option value="${b.id}">${b.name}</option>`).join("");
+  document.getElementById("bop-from-bank").innerHTML='<option value="">Select…</option>'+bOpts;
+  document.getElementById("bop-to-bank").innerHTML='<option value="">Select…</option>'+bOpts;
+  document.getElementById("bop-from-bank").value=bankId;
+  // Set dates
+  const today=new Date().toISOString().slice(0,10);
+  document.getElementById("bop-add-date").value=today;
+  document.getElementById("bop-txfr-date").value=today;
+  // Clear fields
+  ["bop-add-amount","bop-add-source","bop-add-notes","bop-txfr-notes"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("bop-txfr-amount").value="";
+  document.getElementById("bankop-result").textContent="";
+  setBankOp("add");
+  document.getElementById("modal-bankop").classList.add("open");
+}
+async function confirmBankOp(){
+  const bankId=document.getElementById("bop-bank-id").value;
+  const b=banks.find(x=>x.id===bankId);if(!b)return;
+  if(currentBankOp==="add"){
+    const amount=parseFloat(document.getElementById("bop-add-amount").value)||0;
+    const date=document.getElementById("bop-add-date").value;
+    const by=document.getElementById("bop-add-by").value;
+    const source=document.getElementById("bop-add-source").value.trim();
+    const note=document.getElementById("bop-add-notes").value.trim();
+    if(!amount){toast("⚠️ Enter amount to add");return;}
+    if(!date){toast("⚠️ Select date");return;}
+    if(!by){toast("⚠️ Select who added the funds");return;}
+    const txn={type:"add",amount,date,by,source,note,recordedAt:new Date().toISOString()};
+    const newAmount=b.amount+amount;
+    const updTxns=[...(b.transactions||[]),txn];
+    const data={amount:newAmount,transactions:updTxns};
+    if(DEMO){const i=DS.banks.findIndex(x=>x.id===bankId);if(i>=0)DS.banks[i]={...DS.banks[i],...data};banks=DS.banks.map(x=>({...x}));}
+    else try{await db.collection("banks").doc(bankId).update(data);}catch(e){toast("❌ Failed: "+e.message);return;}
+    banks[banks.findIndex(x=>x.id===bankId)]={...b,...data};
+    document.getElementById("bankop-result").textContent=`✅ Added ${fmt(amount)}. New balance: ${fmt(newAmount)}`;
+    toast(`✅ ${fmt(amount)} added to ${b.name}`);
+  } else {
+    // TRANSFER
+    const fromId=document.getElementById("bop-from-bank").value;
+    const toId=document.getElementById("bop-to-bank").value;
+    const amount=parseFloat(document.getElementById("bop-txfr-amount").value)||0;
+    const date=document.getElementById("bop-txfr-date").value;
+    const by=document.getElementById("bop-txfr-by").value;
+    const note=document.getElementById("bop-txfr-notes").value.trim();
+    if(!fromId){toast("⚠️ Select source account");return;}
+    if(!toId){toast("⚠️ Select destination account");return;}
+    if(fromId===toId){toast("⚠️ Source and destination must be different");return;}
+    if(!amount){toast("⚠️ Enter transfer amount");return;}
+    if(!date){toast("⚠️ Select date");return;}
+    if(!by){toast("⚠️ Select who transferred");return;}
+    const fromBank=banks.find(x=>x.id===fromId);
+    const toBank=banks.find(x=>x.id===toId);
+    if(!fromBank||!toBank){toast("❌ Account not found");return;}
+    const txnOut={type:"transfer",dir:"out",amount,date,by,to:toBank.name,note,recordedAt:new Date().toISOString()};
+    const txnIn={type:"transfer",dir:"in",amount,date,by,from:fromBank.name,note,recordedAt:new Date().toISOString()};
+    const newFromAmt=fromBank.amount-amount;
+    const newToAmt=toBank.amount+amount;
+    const updFrom={amount:newFromAmt,transactions:[...(fromBank.transactions||[]),txnOut]};
+    const updTo={amount:newToAmt,transactions:[...(toBank.transactions||[]),txnIn]};
+    if(DEMO){
+      const fi=DS.banks.findIndex(x=>x.id===fromId);if(fi>=0)DS.banks[fi]={...DS.banks[fi],...updFrom};
+      const ti=DS.banks.findIndex(x=>x.id===toId);if(ti>=0)DS.banks[ti]={...DS.banks[ti],...updTo};
+      banks=DS.banks.map(x=>({...x}));
+    } else {
+      try{
+        await db.collection("banks").doc(fromId).update(updFrom);
+        await db.collection("banks").doc(toId).update(updTo);
+      }catch(e){toast("❌ Transfer failed: "+e.message);return;}
+      const fi=banks.findIndex(x=>x.id===fromId);if(fi>=0)banks[fi]={...fromBank,...updFrom};
+      const ti=banks.findIndex(x=>x.id===toId);if(ti>=0)banks[ti]={...toBank,...updTo};
+    }
+    document.getElementById("bankop-result").textContent=`✅ Transferred ${fmt(amount)} from ${fromBank.name} → ${toBank.name}`;
+    toast(`✅ Transferred ${fmt(amount)}`);
+  }
+  renderBudgetTab();renderDashboard();
+  setTimeout(()=>closeModal("modal-bankop"),1200);
+}
+function exportBankTxnCSV(){
+  const rows=[["Account","Transaction Type","Direction","Amount","Date","By","Source / From / To","Notes"]];
+  banks.forEach(b=>{
+    (b.transactions||[]).forEach(t=>{
+      rows.push([
+        b.name,
+        t.type==="add"?"Add Funds":"Transfer",
+        t.dir||"in",
+        t.amount||0,
+        t.date||"",
+        t.by||"",
+        t.source||t.from||t.to||"",
+        t.note||""
+      ]);
+    });
+  });
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const a=document.createElement("a");
+  a.href="data:text/csv;charset=utf-8,\uFEFF"+encodeURIComponent(csv);
+  a.download="dream-house-bank-transactions.csv";a.click();
+  toast("📥 Bank transactions CSV downloaded");
 }
 
 // ══════════════════════════════════════════════
